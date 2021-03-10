@@ -7,49 +7,50 @@ try:
     # Create a new model
     m = gp.Model("sutd_esd_timetable_scheduling")
 
-    jobs, proc_time, venue = gp.multidict(
+    jobs, proc_time = gp.multidict(
         {
-            "J01": [4, "2404"],
-            "J02": [4, "2404"],
-            "J03": [4, "2503"],
-            "J04": [4, "2503"],
-            "J05": [4, "2505"],
-            "J06": [4, "2404"],
-            "J07": [4, "2404"],
-            "J08": [4, "2505"],
-            "J09": [4, "2505"],
-            "J10": [4, "2503"],
-            "J11": [4, "2503"],
-            "J12": [4, "2503"],
-            "J13": [4, "2503"],
-            "J14": [2, "1203"],
-            "J15": [4, "2503"],
-            "J16": [4, "2503"],
-            "J17": [4, "1415"],
-            "J18": [4, "1415"],
-            "J19": [4, "2308"],
-            "J20": [4, "2308"],
-            "J21": [2, "1610"],
-            "J22": [4, "2304"],
-            "J23": [4, "2304"],
-            "J24": [4, "1610"],
-            "J25": [4, "1610"],
-            "J26": [4, "2304"],
-            "J27": [4, "2304"],
-            "J28": [2, "2404"],
-            "J29": [2, "2404"],
-            "J30": [4, "2404"],
-            "J31": [3, "2404"],
-            "J32": [3, "2404"],
-            "J33": [4, "2404"],
-            "J34": [4, "2404"],
-            "J35": [4, "2404"],
-            "J36": [3, "1203"],
-            "J37": [3, "1203"],
-            "J38": [4, "1203"],
+            "J01": [4],
+            "J02": [4],
+            "J03": [4],
+            "J04": [4],
+            "J05": [4],
+            "J06": [4],
+            "J07": [4],
+            "J08": [4],
+            "J09": [4],
+            "J10": [4],
+            "J11": [4],
+            "J12": [4],
+            "J13": [4],
+            "J14": [2],
+            "J15": [4],
+            "J16": [4],
+            "J17": [4],
+            "J18": [4],
+            "J19": [4],
+            "J20": [4],
+            "J21": [2],
+            "J22": [4],
+            "J23": [4],
+            "J24": [4],
+            "J25": [4],
+            "J26": [4],
+            "J27": [4],
+            "J28": [2],
+            "J29": [2],
+            "J30": [4],
+            "J31": [3],
+            "J32": [3],
+            "J33": [4],
+            "J34": [4],
+            # "J35": [4],
+            "J36": [3],
+            "J37": [3],
+            "J38": [4],
         }
     )
 
+    # weights based on starting time of a class
     weight = [
         2,
         1,
@@ -79,23 +80,20 @@ try:
     T = 23  # 0.5h blocks per day 8.30 and 19.30
     Days = 5  # monday to friday
 
-    # never use the values of this dictionary, just keys
-    start_time = {
-        (j, t, d): weight[t] for j in jobs for t in range(T) for d in range(Days)
-    }
+    # Create supporting variable indicating if job is running in a timeslot
+    timeslot_taken = {(j, t, d): 0 for j in jobs for t in range(T) for d in range(Days)}
 
-    # Create decision variables Xjtd
-    X = m.addVars(start_time.keys(), vtype=GRB.BINARY, name="X")
+    # Create (start-)time indexed decision variables Xjtd
+    X = m.addVars(taken.keys(), vtype=GRB.BINARY, name="X")
 
-    # Add variable for occupied slot
-    taken = {(j, t, d): 0 for j in jobs for t in range(T) for d in range(Days)}
+    # Calculate value of the supporting variable
     for j in jobs:
         for t in range(T):
             minT = max(0, t + 1 - proc_time[j])
             maxT = t
             for d in range(Days):
                 for s in range(minT, maxT + 1):
-                    taken[j, t, d] += X[j, s, d]
+                    timeslot_taken[j, t, d] += X[j, s, d]
 
     # Set objective function
     obj_func = gp.quicksum(
@@ -104,19 +102,21 @@ try:
 
     m.setObjective(obj_func, GRB.MINIMIZE)
 
-    # Hardcode non ESD classes
+    # Hardcode non-ESD classes
     m.addConstr(X["J28", 1, 3] == 1)
     m.addConstr(X["J29", 4, 0] == 1)
     m.addConstr(X["J30", 11, 0] == 1)
-    # m.addConstr(X["J31", 6, 0] == 1)
+    m.addConstr(X["J31", 6, 0] == 1)
     m.addConstr(X["J32", 16, 1] == 1)
     m.addConstr(X["J33", 15, 0] == 1)
     m.addConstr(X["J34", 0, 4] == 1)
-    m.addConstr(X["J35", 7, 0] == 1)
+    # this should be week 14 only, conflicts with "J31"
+    # m.addConstr(X["J35", 7, 0] == 1)
     m.addConstr(X["J36", 1, 0] == 1)
     m.addConstr(X["J37", 13, 1] == 1)
     m.addConstr(X["J38", 9, 1] == 1)
 
+    # Set of jobs using the same location
     locations = [
         ["J14", "J36", "J37", "J38"],
         ["J17", "J18"],
@@ -135,33 +135,22 @@ try:
             "J32",
             "J33",
             "J34",
-            "J35",
+            # "J35",
         ],
         ["J03", "J04", "J10", "J11", "J12", "J13", "J15", "J16"],
         ["J05", "J08", "J09"],
     ]
 
-    # FIXME
-    # Jobs from a set of eclusive jobs J due to being the same location cannot be started on the same day at same time
-    # for location in locations:
-    #     for d in range(Days):
-    #         for t in range(T):
-    #             for l in location:
-    #                 same_day_time_location = 0
-    #                 minT = max(0, t + 1 - proc_time[l])
-    #                 maxT = t
-    #                 for s in range(minT, maxT + 1):
-    #                     same_day_time_location += X[l, s, d]
-    #         m.addConstr(same_day_time_location <= 1)
-
+    # Jobs from a set of exclusive jobs J due to being the same location, cannot be started on the same day at the same time
     for location in locations:
         for d in range(Days):
             for t in range(T):
                 same_day_time_location = 0
-                for l in location:
-                    same_day_time_location += taken[l, t, d]
+                for job in location:
+                    same_day_time_location += timeslot_taken[job, t, d]
                 m.addConstr(same_day_time_location <= 1)
 
+    # Set of jobs with the same professor
     professors = [
         ["J01", "J02", "J03", "J04"],
         ["J05", "J06", "J07", "J08", "J09"],
@@ -173,25 +162,13 @@ try:
         ["J26", "J27"],
     ]
 
-    # FIXME
-    # Jobs from a set of eclusive jobs J due to being the same professor cannot be started on the same day at the same time
-    # for professor in professors:
-    #     for d in range(Days):
-    #         for t in range(T):
-    #             for p in professor:
-    #                 same_day_time_professor = 0
-    #                 minT = max(0, t + 1 - proc_time[p])
-    #                 maxT = t
-    #                 for s in range(minT, maxT + 1):
-    #                     same_day_time_professor += X[p, t, d]
-    #         m.addConstr(same_day_time_professor <= 1)
-
+    # Jobs from a set of exclusive jobs J due to being the same prof, cannot be started on the same day at the same time
     for professor in professors:
         for d in range(Days):
             for t in range(T):
                 same_day_time_prof = 0
-                for p in professor:
-                    same_day_time_prof += taken[p, t, d]
+                for job in professor:
+                    same_day_time_prof += timeslot_taken[job, t, d]
                 m.addConstr(same_day_time_prof <= 1)
 
     class_subjects = [
@@ -202,13 +179,13 @@ try:
         ["J14", "J15", "J16", "J17", "J18", "J21", "J22", "J23"],
     ]
 
-    # Jobs from a set of exclusive jobs J due to being for the same class, cannot be started on the same day at the same time
+    # Jobs from a set of exclusive jobs J due to being for the same class/track, cannot be started on the same day at the same time
     for c_subject in class_subjects:
         for d in range(Days):
             for t in range(T):
                 same_day_time_class = 0
-                for c in c_subject:
-                    same_day_time_class += taken[c, t, d]
+                for job in c_subject:
+                    same_day_time_class += timeslot_taken[job, t, d]
                 m.addConstr(same_day_time_class <= 1)
 
     # Each job j starts at exactly one time instant
@@ -260,6 +237,7 @@ try:
         "J27",
     ]
 
+    # create template function for time-instant constraints
     def time_instant_constraint(start, end, day):
         time_instant_sum = 0
         for j in ESD_jobs:
@@ -340,7 +318,7 @@ try:
         "J32": "",
         "J33": "",
         "J34": "",
-        "J35": "",
+        # "J35": "",
         "J36": "",
         "J37": "",
         "J38": "",
