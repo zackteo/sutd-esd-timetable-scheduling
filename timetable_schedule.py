@@ -95,12 +95,26 @@ try:
                 for s in range(minT, maxT + 1):
                     timeslot_taken[j, t, d] += X[j, s, d]
 
+    jobs_in_timeslot = {(t, d): 0 for t in range(T) for d in range(Days)}
+
+    Y = m.addVars(jobs_in_timeslot.keys(), vtype=GRB.CONTINUOUS, name="Y")
+    for t in range(T):
+        for d in range(Days):
+            for j in jobs:
+                jobs_in_timeslot[t, d] += timeslot_taken[j, t, d]
+            m.addConstr(Y[t, d] >= jobs_in_timeslot[t, d] - 1)
+            m.addConstr(Y[t, d] >= 0)
+
     # Set objective function
     obj_func = gp.quicksum(
         weight[t] * X[j, t, d] for j in jobs for t in range(T) for d in range(Days)
     )
 
-    m.setObjective(obj_func, GRB.MINIMIZE)
+    new_obj_func = obj_func + gp.quicksum(
+        Y[t, d] for t in range(T) for d in range(Days)
+    )
+
+    m.setObjective(new_obj_func, GRB.MINIMIZE)
 
     # Hardcode non-ESD classes
     m.addConstr(X["J28", 1, 3] == 1)
@@ -115,6 +129,19 @@ try:
     m.addConstr(X["J36", 1, 0] == 1)
     m.addConstr(X["J37", 13, 1] == 1)
     m.addConstr(X["J38", 9, 1] == 1)
+
+    timeslot_taken_plusone = {
+        (j, t, d): 0 for j in jobs for t in range(T) for d in range(Days)
+    }
+
+    # Calculate value of the supporting variable
+    for j in jobs:
+        for t in range(T):
+            minT = max(0, t + 1 - proc_time[j])
+            maxT = min(t + 1, T - 1)
+            for d in range(Days):
+                for s in range(minT, maxT + 1):
+                    timeslot_taken_plusone[j, t, d] += X[j, s, d]
 
     # Set of jobs using the same location
     locations = [
@@ -168,7 +195,7 @@ try:
             for t in range(T):
                 same_day_time_prof = 0
                 for job in professor:
-                    same_day_time_prof += timeslot_taken[job, t, d]
+                    same_day_time_prof += timeslot_taken_plusone[job, t, d]
                 m.addConstr(same_day_time_prof <= 1)
 
     class_subjects = [
@@ -185,7 +212,7 @@ try:
             for t in range(T):
                 same_day_time_class = 0
                 for job in c_subject:
-                    same_day_time_class += timeslot_taken[job, t, d]
+                    same_day_time_class += timeslot_taken_plusone[job, t, d]
                 m.addConstr(same_day_time_class <= 1)
 
     # Each job j starts at exactly one time instant
@@ -348,6 +375,12 @@ try:
         "20": "1830",
         "21": "1900",
         "22": "1930",
+        "23": "2000",
+        "24": "2030",
+        "25": "2100",
+        "26": "2130",
+        "27": "2200",
+        "28": "2230",
     }
 
     index_to_day = {
