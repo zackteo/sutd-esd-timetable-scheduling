@@ -84,7 +84,7 @@ try:
     timeslot_taken = {(j, t, d): 0 for j in jobs for t in range(T) for d in range(Days)}
 
     # Create (start-)time indexed decision variables Xjtd
-    X = m.addVars(taken.keys(), vtype=GRB.BINARY, name="X")
+    X = m.addVars(timeslot_taken.keys(), vtype=GRB.BINARY, name="X")
 
     # Calculate value of the supporting variable
     for j in jobs:
