@@ -51,6 +51,32 @@ try:
     )
 
     # weights based on starting time of a class
+    old_weight = [
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+    ]
+
     weight = [
         2,
         1,
@@ -98,11 +124,25 @@ try:
     jobs_in_timeslot = {(t, d): 0 for t in range(T) for d in range(Days)}
 
     Y = m.addVars(jobs_in_timeslot.keys(), vtype=GRB.CONTINUOUS, name="Y")
-    
+
     # Set of Term 7 jobs we want to avoid clashing
-    term_7 = ["J14","J15","J16","J17","J18","J19","J20",
-              "J21","J22","J23","J24","J25","J26","J27"]
-    
+    term_7 = [
+        "J14",
+        "J15",
+        "J16",
+        "J17",
+        "J18",
+        "J19",
+        "J20",
+        "J21",
+        "J22",
+        "J23",
+        "J24",
+        "J25",
+        "J26",
+        "J27",
+    ]
+
     for t in range(T):
         for d in range(Days):
             for j in term_7:
@@ -268,6 +308,12 @@ try:
         "J26",
         "J27",
     ]
+
+    # All ESD jobs start 1830 latest, avoid ending past 2030
+    for j in ESD_jobs:
+        for d in range(Days):
+            for t in range(21, T):
+                m.addConstr(X[j, t, d] == 0)
 
     # create template function for time-instant constraints
     def time_instant_constraint(start, end, day):
